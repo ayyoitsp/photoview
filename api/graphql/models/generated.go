@@ -108,6 +108,16 @@ type TimelineGroup struct {
 	Date time.Time `json:"date"`
 }
 
+// The number of media items shot within a single calendar month.
+type TimelineHistogramBucket struct {
+	// Calendar year, e.g. 2015
+	Year int `json:"year"`
+	// Calendar month, 1-12
+	Month int `json:"month"`
+	// Number of media items shot in this month
+	Count int `json:"count"`
+}
+
 // Supported language translations of the user interface
 type LanguageTranslation string
 

@@ -114,4 +114,63 @@ func TestMyTimeline(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, timelineMedia, 2)
 	})
+
+	// The histogram backs a date scrubber, so it must agree with the timeline it
+	// scrubs: same album scope, same favorites filter, same newest-first order.
+	t.Run("MyTimelineHistogram groups by month, newest first", func(t *testing.T) {
+		buckets, err := actions.MyTimelineHistogram(db, user, nil)
+
+		assert.NoError(t, err)
+		assert.Len(t, buckets, 2)
+
+		// pic1 + pic3 were shot in Sep 2021, pic2 + pic4 in Aug 2021.
+		assert.Equal(t, 2021, buckets[0].Year)
+		assert.Equal(t, 9, buckets[0].Month)
+		assert.Equal(t, 2, buckets[0].Count)
+
+		assert.Equal(t, 2021, buckets[1].Year)
+		assert.Equal(t, 8, buckets[1].Month)
+		assert.Equal(t, 2, buckets[1].Count)
+	})
+
+	t.Run("MyTimelineHistogram counts total media of the timeline", func(t *testing.T) {
+		buckets, err := actions.MyTimelineHistogram(db, user, nil)
+		assert.NoError(t, err)
+
+		timelineMedia, err := actions.MyTimeline(db, user, nil, nil, nil)
+		assert.NoError(t, err)
+
+		total := 0
+		for _, b := range buckets {
+			total += b.Count
+		}
+
+		assert.Equal(t, len(timelineMedia), total)
+	})
+
+	t.Run("MyTimelineHistogram with only favorites", func(t *testing.T) {
+		favorites := true
+		buckets, err := actions.MyTimelineHistogram(db, user, &favorites)
+
+		assert.NoError(t, err)
+		assert.Len(t, buckets, 1)
+		assert.Equal(t, 2021, buckets[0].Year)
+		assert.Equal(t, 9, buckets[0].Month)
+		assert.Equal(t, 1, buckets[0].Count)
+	})
+
+	t.Run("MyTimelineHistogram excludes media of other users", func(t *testing.T) {
+		buckets, err := actions.MyTimelineHistogram(db, anotherUser, nil)
+
+		assert.NoError(t, err)
+
+		total := 0
+		for _, b := range buckets {
+			total += b.Count
+		}
+
+		// anotherUser owns a single media item, and it must not pick up any of
+		// the four owned by the first user.
+		assert.LessOrEqual(t, total, 1)
+	})
 }

@@ -8,14 +8,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// timelineScope restricts a media query to the albums the given user can see.
+func timelineScope(db *gorm.DB, user *models.User) *gorm.DB {
+	return db.
+		Joins("JOIN albums ON media.album_id = albums.id").
+		Where("albums.id IN (?)", db.Table("user_albums").Select("user_albums.album_id").Where("user_id = ?", user.ID))
+}
+
+// onlyFavoritesScope restricts a media query to the user's favorites, when requested.
+func onlyFavoritesScope(db *gorm.DB, query *gorm.DB, user *models.User, onlyFavorites *bool) *gorm.DB {
+	if onlyFavorites == nil || !*onlyFavorites {
+		return query
+	}
+
+	return query.Where("media.id IN (?)", db.Table("user_media_data").
+		Select("user_media_data.media_id").
+		Where("user_media_data.user_id = ?", user.ID).
+		Where("user_media_data.favorite"))
+}
+
 func MyTimeline(db *gorm.DB, user *models.User, paginate *models.Pagination, onlyFavorites *bool,
 	fromDate *time.Time) ([]*models.Media, error) {
 
 	const albumsTitleASC = "albums.title ASC"
 
-	query := db.
-		Joins("JOIN albums ON media.album_id = albums.id").
-		Where("albums.id IN (?)", db.Table("user_albums").Select("user_albums.album_id").Where("user_id = ?", user.ID))
+	query := timelineScope(db, user)
 
 	switch drivers.GetDatabaseDriverType(db) {
 	case drivers.POSTGRES:
@@ -43,13 +60,7 @@ func MyTimeline(db *gorm.DB, user *models.User, paginate *models.Pagination, onl
 		query = query.Where("media.date_shot < ?", fromDate)
 	}
 
-	if onlyFavorites != nil && *onlyFavorites {
-		query = query.
-			Where("media.id IN (?)", db.Table("user_media_data").
-				Select("user_media_data.media_id").
-				Where("user_media_data.user_id = ?", user.ID).
-				Where("user_media_data.favorite"))
-	}
+	query = onlyFavoritesScope(db, query, user, onlyFavorites)
 
 	query = models.FormatSQL(query, nil, paginate)
 
@@ -59,4 +70,44 @@ func MyTimeline(db *gorm.DB, user *models.User, paginate *models.Pagination, onl
 	}
 
 	return media, nil
+}
+
+// MyTimelineHistogram returns the number of media per calendar month, newest
+// month first. It reads only aggregate counts, so it stays cheap even on very
+// large libraries, letting a client size a date scrubber without fetching media.
+func MyTimelineHistogram(db *gorm.DB, user *models.User,
+	onlyFavorites *bool) ([]*models.TimelineHistogramBucket, error) {
+
+	var yearExpr, monthExpr string
+	switch drivers.GetDatabaseDriverType(db) {
+	case drivers.POSTGRES:
+		yearExpr = "EXTRACT(YEAR FROM media.date_shot)"
+		monthExpr = "EXTRACT(MONTH FROM media.date_shot)"
+	case drivers.SQLITE:
+		yearExpr = "CAST(strftime('%Y', media.date_shot) AS INTEGER)"
+		monthExpr = "CAST(strftime('%m', media.date_shot) AS INTEGER)"
+	default:
+		yearExpr = "YEAR(media.date_shot)"
+		monthExpr = "MONTH(media.date_shot)"
+	}
+
+	query := timelineScope(db, user).
+		Model(&models.Media{}).
+		Select(yearExpr + " AS year, " + monthExpr + " AS month, COUNT(*) AS count").
+		Where("media.date_shot IS NOT NULL")
+
+	query = onlyFavoritesScope(db, query, user, onlyFavorites)
+
+	query = query.
+		Group(yearExpr).
+		Group(monthExpr).
+		Order("year DESC").
+		Order("month DESC")
+
+	buckets := []*models.TimelineHistogramBucket{}
+	if err := query.Scan(&buckets).Error; err != nil {
+		return nil, err
+	}
+
+	return buckets, nil
 }

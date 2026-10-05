@@ -8,4 +8,26 @@ extend type Query {
     "Only fetch media that is older than this date"
     fromDate: Time
   ): [Media!]! @isAuthorized
+
+  """
+  Get the number of media per month in the timeline, ordered newest first.
+  Intended for building a date scrubber: the counts let a client compute the
+  total size of the timeline and the offset of any given month without
+  fetching the media themselves.
+  """
+  myTimelineHistogram(
+    onlyFavorites: Boolean
+  ): [TimelineHistogramBucket!]! @isAuthorized
+}
+
+"""
+The number of media items shot within a single calendar month.
+"""
+type TimelineHistogramBucket {
+  "Calendar year, e.g. 2015"
+  year: Int!
+  "Calendar month, 1-12"
+  month: Int!
+  "Number of media items shot in this month"
+  count: Int!
 }

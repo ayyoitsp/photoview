@@ -23,3 +23,13 @@ func (r *queryResolver) MyTimeline(ctx context.Context, paginate *models.Paginat
 
 	return actions.MyTimeline(r.DB(ctx), user, paginate, onlyFavorites, fromDate)
 }
+
+// MyTimelineHistogram is the resolver for the myTimelineHistogram field.
+func (r *queryResolver) MyTimelineHistogram(ctx context.Context, onlyFavorites *bool) ([]*models.TimelineHistogramBucket, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return nil, auth.ErrUnauthorized
+	}
+
+	return actions.MyTimelineHistogram(r.DB(ctx), user, onlyFavorites)
+}
