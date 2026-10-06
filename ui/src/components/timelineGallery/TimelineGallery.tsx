@@ -17,7 +17,30 @@ import {
 } from './timelineGalleryReducer'
 import { urlPresentModeSetupHook } from '../photoGallery/mediaGalleryReducer'
 import TimelineFilters from './TimelineFilters'
+import DateScrubber from './DateScrubber'
 import client from '../../apolloClient'
+
+/**
+ * Turn the `date` URL parameter into the exclusive upper bound the timeline
+ * query wants. `YYYY` keeps the original meaning of the year filter, "that year
+ * and earlier", while `YYYY-MM` comes from the date scrubber and lands on a
+ * single month.
+ */
+export const fromDateParam = (filterDate: string | null): string | undefined => {
+  if (!filterDate) return undefined
+
+  const month = filterDate.match(/^(\d{4})-(\d{2})$/)
+  if (month) {
+    const year = parseInt(month[1])
+    const monthIndex = parseInt(month[2])
+    // Exclusive bound, so step to the first instant of the following month.
+    const nextYear = monthIndex === 12 ? year + 1 : year
+    const nextMonth = monthIndex === 12 ? 1 : monthIndex + 1
+    return `${nextYear}-${String(nextMonth).padStart(2, '0')}-01T00:00:00Z`
+  }
+
+  return `${parseInt(filterDate) + 1}-01-01T00:00:00Z`
+}
 
 export const MY_TIMELINE_QUERY = gql`
   query myTimeline(
@@ -99,9 +122,7 @@ const TimelineGallery = () => {
   >(MY_TIMELINE_QUERY, {
     variables: {
       onlyFavorites,
-      fromDate: filterDate
-        ? `${parseInt(filterDate) + 1}-01-01T00:00:00Z`
-        : undefined,
+      fromDate: fromDateParam(filterDate),
       offset: 0,
       limit: 200,
     },
@@ -173,6 +194,10 @@ const TimelineGallery = () => {
         setOnlyFavorites={setOnlyFavorites}
         filterDate={filterDate}
         setFilterDate={setFilterDate}
+      />
+      <DateScrubber
+        onlyFavorites={onlyFavorites}
+        onSeek={month => setFilterDate(month)}
       />
       <div className="-mx-3 flex flex-wrap" ref={containerElem}>
         {timelineGroups}
