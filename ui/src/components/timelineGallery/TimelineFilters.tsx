@@ -61,6 +61,30 @@ const DateSelector = ({ filterDate, setFilterDate }: DateSelectorProps) => {
     }
   }
 
+  // The date scrubber writes a YYYY-MM into the same parameter this dropdown
+  // reads. Without a matching item the control would show nothing selected
+  // after a scrub, so surface the scrubbed month as its own entry.
+  const scrubbedMonth = filterDate?.match(/^(\d{4})-(\d{2})$/)
+  if (scrubbedMonth) {
+    const monthDate = new Date(
+      parseInt(scrubbedMonth[1]),
+      parseInt(scrubbedMonth[2]) - 1
+    )
+    items = [
+      items[0],
+      {
+        value: filterDate as string,
+        label: t('timeline_filter.date.dropdown_month', '{{month}} and earlier', {
+          month: monthDate.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'long',
+          }),
+        }),
+      },
+      ...items.slice(1),
+    ]
+  }
+
   return (
     <fieldset>
       <legend id="filter_group_date-label" className="inline-block mb-1">

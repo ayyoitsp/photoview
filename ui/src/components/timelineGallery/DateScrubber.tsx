@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, gql } from '@apollo/client'
 
 export const MY_TIMELINE_HISTOGRAM_QUERY = gql`
@@ -75,6 +75,9 @@ type DateScrubberProps = {
   onSeek(yearMonth: string): void
 }
 
+/** Tailwind's `lg` breakpoint, mirrored here because the inset is set inline. */
+const LG_BREAKPOINT = 1024
+
 /**
  * A vertical date scrubber for the timeline, in the spirit of Google Photos.
  *
@@ -87,6 +90,16 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
   const [hover, setHover] = useState<{ bucket: PlacedBucket; y: number } | null>(
     null
   )
+
+  const [isWide, setIsWide] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth >= LG_BREAKPOINT
+  )
+
+  useEffect(() => {
+    const onResize = () => setIsWide(window.innerWidth >= LG_BREAKPOINT)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const { data } = useQuery<HistogramData>(MY_TIMELINE_HISTOGRAM_QUERY, {
     variables: { onlyFavorites },
@@ -148,9 +161,18 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
 
   return (
     <div
-      // Wider on touch screens: a thumb needs a target it can actually land on,
-      // and the labels alone are a few pixels tall.
-      className="fixed right-0 top-[120px] bottom-4 w-16 md:w-14 z-20 select-none"
+      className="fixed right-0 w-16 lg:w-14 z-20 select-none"
+      // Inset is set inline, not through utilities: this project builds against
+      // Tailwind 2, whose JIT does not emit arbitrary values behind a variant,
+      // so `lg:top-[120px]` compiles to nothing and the strip loses its bounds.
+      //
+      // Below `lg` the main menu is a bottom bar 80px tall over a 72px header
+      // (Searchbar derives h-[calc(100vh-152px)] from the same two numbers), so
+      // the track has to stop above the bar rather than run underneath it.
+      style={{
+        top: isWide ? 120 : 72,
+        bottom: isWide ? 16 : 88,
+      }}
       data-testid="date-scrubber"
     >
       <div
@@ -181,8 +203,8 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
             only feedback is the tooltip, which sits away from the touch point. */}
         {hover && (
           <div
-            className="absolute right-[13px] w-4 h-4 -translate-y-1/2 rounded-full bg-sky-500 shadow pointer-events-none"
-            style={{ top: `${hover.bucket.offset * 100}%` }}
+            className="absolute w-4 h-4 -translate-y-1/2 rounded-full bg-sky-500 shadow pointer-events-none"
+            style={{ top: `${hover.bucket.offset * 100}%`, right: 13 }}
           />
         )}
 
@@ -192,7 +214,7 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
             className="absolute right-3 flex items-center gap-1 -translate-y-1/2 pointer-events-none"
             style={{ top: `${bucket.offset * 100}%` }}
           >
-            <span className="text-[11px] leading-none text-gray-500 dark:text-gray-400 tabular-nums">
+            <span className="leading-none text-gray-500 dark:text-gray-400 tabular-nums" style={{ fontSize: 11 }}>
               {bucket.year}
             </span>
             <span className="w-2 h-px bg-gray-400 dark:bg-gray-500" />
