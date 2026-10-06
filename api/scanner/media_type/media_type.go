@@ -44,6 +44,16 @@ var (
 	TypeMPEG = mediaType("video/mpeg")
 	TypeOGG  = mediaType("video/ogg")
 	TypeWEBM = mediaType("video/webm")
+
+	// QuickTime is treated as web compatible here, which upstream does not do.
+	// A .mov is an ISO base media container like .mp4, and phone and camera
+	// footage inside one is practically always H.264 or HEVC, both of which
+	// Chrome plays natively on macOS and Android. Transcoding them produces a
+	// second copy of a file the browser could already play.
+	//
+	// The trade-off is Firefox, which plays H.264 in QuickTime but not HEVC, so
+	// a HEVC .mov will not play there. Revert this if Firefox has to work.
+	TypeQuickTime = mediaType("video/quicktime")
 )
 
 var webImageMimetypes = arrayToSet([]MediaType{
@@ -59,6 +69,7 @@ var webVideoMimetypes = arrayToSet([]MediaType{
 	TypeMPEG,
 	TypeWEBM,
 	TypeOGG,
+	TypeQuickTime,
 })
 
 // Legacy function. Should be removed.
@@ -73,6 +84,7 @@ var WebMimetypes = []string{
 	TypeMPEG.String(),
 	TypeWEBM.String(),
 	TypeOGG.String(),
+	TypeQuickTime.String(),
 }
 
 func arrayToSet[T comparable](array []T) map[T]struct{} {

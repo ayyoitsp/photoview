@@ -111,6 +111,9 @@ func TestMediaTypeNoDeps(t *testing.T) {
 		{TypeMPEG, !isImage, isVideo, isWebCompatible, isSupport},
 		{TypeOGG, !isImage, isVideo, isWebCompatible, isSupport},
 		{TypeWEBM, !isImage, isVideo, isWebCompatible, isSupport},
+		// Diverges from upstream: QuickTime is served as-is rather than
+		// transcoded, see the TypeQuickTime comment in media_type.go.
+		{TypeQuickTime, !isImage, isVideo, isWebCompatible, isSupport},
 	}
 
 	for _, tc := range tests {
