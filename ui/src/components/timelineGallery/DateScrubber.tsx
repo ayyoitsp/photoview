@@ -148,7 +148,9 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
 
   return (
     <div
-      className="fixed right-0 top-[120px] bottom-4 w-14 z-10 select-none"
+      // Wider on touch screens: a thumb needs a target it can actually land on,
+      // and the labels alone are a few pixels tall.
+      className="fixed right-0 top-[120px] bottom-4 w-16 md:w-14 z-20 select-none"
       data-testid="date-scrubber"
     >
       <div
@@ -174,6 +176,15 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
       >
         {/* the track itself */}
         <div className="absolute right-5 top-0 bottom-0 w-px bg-gray-300 dark:bg-gray-600" />
+
+        {/* While dragging, a thumb marks where the finger is. Without it the
+            only feedback is the tooltip, which sits away from the touch point. */}
+        {hover && (
+          <div
+            className="absolute right-[13px] w-4 h-4 -translate-y-1/2 rounded-full bg-sky-500 shadow pointer-events-none"
+            style={{ top: `${hover.bucket.offset * 100}%` }}
+          />
+        )}
 
         {yearLabels.map(bucket => (
           <div
