@@ -109,36 +109,62 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
 
   if (placed.length === 0) return null
 
-  const positionFromEvent = (clientY: number) => {
+  const positionFromY = (clientY: number) => {
     const track = trackRef.current
     if (!track) return 0
     const rect = track.getBoundingClientRect()
     return (clientY - rect.top) / rect.height
   }
 
-  const handleMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    const position = positionFromEvent(event.clientY)
-    const bucket = bucketAtPosition(placed, position)
+  const bucketFromY = (clientY: number) => bucketAtPosition(placed, positionFromY(clientY))
+
+  const seekTo = (bucket: PlacedBucket) =>
+    onSeek(`${bucket.year}-${String(bucket.month).padStart(2, '0')}`)
+
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    const bucket = bucketFromY(event.clientY)
     if (bucket) setHover({ bucket, y: event.clientY })
   }
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    const bucket = bucketAtPosition(placed, positionFromEvent(event.clientY))
-    if (!bucket) return
-    onSeek(`${bucket.year}-${String(bucket.month).padStart(2, '0')}`)
+    const bucket = bucketFromY(event.clientY)
+    if (bucket) seekTo(bucket)
+  }
+
+  // Touch drags the thumb and seeks on release, rather than seeking on every
+  // move: refetching the timeline under a moving finger would make the scrubber
+  // fight the drag.
+  const handleTouch = (event: React.TouchEvent<HTMLDivElement>) => {
+    const touch = event.touches[0]
+    if (!touch) return
+    const bucket = bucketFromY(touch.clientY)
+    if (bucket) setHover({ bucket, y: touch.clientY })
+  }
+
+  const handleTouchEnd = () => {
+    if (hover) seekTo(hover.bucket)
+    setHover(null)
   }
 
   return (
     <div
-      className="hidden md:block fixed right-0 top-[120px] bottom-4 w-14 z-10 select-none"
+      className="fixed right-0 top-[120px] bottom-4 w-14 z-10 select-none"
       data-testid="date-scrubber"
     >
       <div
         ref={trackRef}
         className="relative h-full cursor-pointer"
-        onMouseMove={handleMove}
+        // Inline rather than a utility class: the project's Tailwind build may
+        // not ship touch-action utilities, and without this a vertical drag
+        // scrolls the page instead of moving the thumb.
+        style={{ touchAction: 'none' }}
+        onMouseMove={handleMouseMove}
         onMouseLeave={() => setHover(null)}
         onClick={handleClick}
+        onTouchStart={handleTouch}
+        onTouchMove={handleTouch}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={() => setHover(null)}
         role="slider"
         aria-label="Jump to date"
         aria-valuemin={0}
