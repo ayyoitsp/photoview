@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useLayoutEffect, useReducer } from 'react'
+import React, { useRef, useState, useEffect, useLayoutEffect, useReducer, useCallback } from 'react'
 import { useQuery, gql } from '@apollo/client'
 import TimelineGroupDate from './TimelineGroupDate'
 import PresentView from '../photoGallery/presentView/PresentView'
@@ -90,6 +90,12 @@ export const MY_TIMELINE_QUERY = gql`
  */
 const PAGE_SIZE = 500
 
+/**
+ * How close to the top of the loaded window counts as wanting the page above
+ * it. Generous so the fetch starts before the top is actually reached.
+ */
+const UPWARD_LOAD_TRIGGER_PX = 1200
+
 export type TimelineGroup = {
   date: string
   albums: TimelineGroupAlbum[]
@@ -168,51 +174,84 @@ const TimelineGallery = () => {
 
   useEffect(() => {
     loadedStart.current = startOffset
+    setHasEarlier(startOffset > 0)
   }, [startOffset])
 
-  const topSentinel = useRef<HTMLDivElement>(null)
   const loadingEarlier = useRef(false)
 
   // Where the page stood just before media was prepended above it.
   const anchor = useRef<{ scrollHeight: number; scrollY: number } | null>(null)
 
-  // Scrolling down is handled by useScrollPagination, but there is no mirror of
-  // it for scrolling up, so after seeking into the middle of the timeline the
-  // months above the window could never be reached. Fetch them when the top of
-  // the list comes into view.
+  // The loaded window in order, read by the scroll handler to work out which
+  // date is on screen without re-deriving it from the grouped tree.
+  const loadedMedia = useRef<myTimeline_myTimeline[]>([])
+
+  // Whether anything newer than the loaded window is still unfetched, which is
+  // what decides if the button above the timeline is worth showing.
+  const [hasEarlier, setHasEarlier] = useState(startOffset > 0)
+
+  // The date of whatever is at the top of the viewport, so the scrubber can
+  // show where you are and not only where you are going.
+  const [currentDate, setCurrentDate] = useState<string | null>(null)
+
+  // Scrolling down is handled by useScrollPagination, but it has no counterpart
+  // for scrolling up, so after seeking into the middle of the timeline the
+  // months above the window could not be reached at all.
+  //
+  // This is driven by the scroll position rather than an IntersectionObserver.
+  // An observer only reports *changes* in intersection: once a page had loaded
+  // and the scroll was restored, a sentinel that stayed on screen never fired
+  // again and upward paging wedged. Scroll events keep arriving, and the load
+  // re-checks itself when it finishes, so it can chain instead of stalling.
+  const loadEarlier = useCallback(async (force = false) => {
+    if (loadingEarlier.current) return
+    if (loadedStart.current <= 0) return
+    if (!force && window.scrollY > UPWARD_LOAD_TRIGGER_PX) return
+
+    loadingEarlier.current = true
+    const previous = Math.max(0, loadedStart.current - PAGE_SIZE)
+
+    // Note where the page stands now. The correction cannot happen here: React
+    // has not committed the new media yet, so the document has not grown and
+    // there is nothing to measure.
+    anchor.current = {
+      scrollHeight: document.documentElement.scrollHeight,
+      scrollY: window.scrollY,
+    }
+
+    try {
+      await fetchMore({ variables: { offset: previous, limit: PAGE_SIZE } })
+      loadedStart.current = previous
+      setHasEarlier(previous > 0)
+    } finally {
+      loadingEarlier.current = false
+    }
+  }, [fetchMore])
+
   useEffect(() => {
-    const sentinel = topSentinel.current
-    if (!sentinel) return
+    const onScroll = () => {
+      void loadEarlier()
 
-    const observer = new IntersectionObserver(
-      async entries => {
-        if (!entries.some(e => e.isIntersecting)) return
-        if (loadingEarlier.current || loadedStart.current <= 0) return
+      // Estimate which media is at the top of the viewport from how far down
+      // the loaded window the page has scrolled. Approximate - rows vary in
+      // height - but enough to put the marker on the right month.
+      const media = loadedMedia.current
+      if (media.length === 0) return
 
-        loadingEarlier.current = true
-        const previous = Math.max(0, loadedStart.current - PAGE_SIZE)
+      const scrollable =
+        document.documentElement.scrollHeight - window.innerHeight
+      const fraction = scrollable > 0 ? window.scrollY / scrollable : 0
+      const index = Math.min(
+        media.length - 1,
+        Math.max(0, Math.round(fraction * (media.length - 1)))
+      )
+      setCurrentDate(media[index]?.date ?? null)
+    }
 
-        // Note where the page stands now. The correction cannot happen here:
-        // React has not committed the new media yet, so the document has not
-        // grown and there is nothing to measure.
-        anchor.current = {
-          scrollHeight: document.documentElement.scrollHeight,
-          scrollY: window.scrollY,
-        }
-
-        try {
-          await fetchMore({ variables: { offset: previous, limit: PAGE_SIZE } })
-          loadedStart.current = previous
-        } finally {
-          loadingEarlier.current = false
-        }
-      },
-      { rootMargin: '200px 0px 0px 0px' }
-    )
-
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [fetchMore, startOffset])
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [loadEarlier])
 
   useEffect(() => {
     // The cache indexes media by their absolute offset, so a timeline fetched
@@ -221,6 +260,7 @@ const TimelineGallery = () => {
     // entry, so a hole throws and nothing renders at all. Drop them and show the
     // window that is actually loaded.
     const loaded = (data?.myTimeline ?? []).filter(Boolean)
+    loadedMedia.current = loaded
 
     dispatchMedia({
       type: 'replaceTimelineGroups',
@@ -242,7 +282,11 @@ const TimelineGallery = () => {
 
     const grew = document.documentElement.scrollHeight - pending.scrollHeight
     if (grew > 0) window.scrollTo({ top: pending.scrollY + grew })
-  }, [mediaState.timelineGroups])
+
+    // Still near the top, so the page above this one is wanted as well. Without
+    // this the chain stops whenever the restore leaves the viewport in place.
+    void loadEarlier()
+  }, [mediaState.timelineGroups, loadEarlier])
 
   useEffect(() => {
     ; (async () => {
@@ -300,9 +344,19 @@ const TimelineGallery = () => {
       <DateScrubber
         onlyFavorites={onlyFavorites}
         onSeek={offset => setSeekOffset(offset)}
+        currentDate={currentDate}
       />
-      {/* Watched to pull in the months above the loaded window after a seek. */}
-      <div ref={topSentinel} aria-hidden="true" />
+      {hasEarlier && (
+        <div className="flex justify-center my-3">
+          <button
+            type="button"
+            onClick={() => void loadEarlier(true)}
+            className="px-4 py-2 rounded border bg-white dark:bg-dark-bg2 dark:border-dark-border2 text-sm hover:bg-gray-50 dark:hover:bg-dark-bg"
+          >
+            {t('timeline.load_newer', 'Load newer photos')}
+          </button>
+        </div>
+      )}
       <div className="-mx-3 flex flex-wrap" ref={containerElem}>
         {timelineGroups}
       </div>

@@ -91,6 +91,8 @@ type DateScrubberProps = {
   onlyFavorites: boolean
   /** Called with the media offset the timeline should jump to. */
   onSeek(offset: number): void
+  /** ISO date of the media currently at the top of the viewport, if known. */
+  currentDate?: string | null
 }
 
 /** Tailwind's `lg` breakpoint, mirrored here because the inset is set inline. */
@@ -103,7 +105,7 @@ const LG_BREAKPOINT = 1024
  * knows the shape of the whole timeline without paging through it. That is what
  * lets you jump straight to a month instead of scrolling until it loads.
  */
-const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
+const DateScrubber = ({ onlyFavorites, onSeek, currentDate }: DateScrubberProps) => {
   const trackRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<{ bucket: PlacedBucket; y: number } | null>(
     null
@@ -138,6 +140,16 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
     })
   }, [placed])
 
+  // The bucket holding whatever is on screen, so its position can be marked.
+  const current = (() => {
+    if (!currentDate) return undefined
+    const d = new Date(currentDate)
+    if (isNaN(d.getTime())) return undefined
+    const year = d.getFullYear()
+    const month = d.getMonth() + 1
+    return placed.find(b => b.year === year && b.month === month)
+  })()
+
   if (placed.length === 0) return null
 
   const positionFromY = (clientY: number) => {
@@ -149,8 +161,12 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
 
   const bucketFromY = (clientY: number) => bucketAtPosition(placed, positionFromY(clientY))
 
-  const seekTo = (bucket: PlacedBucket) =>
+  const seekTo = (bucket: PlacedBucket) => {
+    // Nothing dismisses the tooltip after a tap - there is no pointer to move
+    // away - so clear it as part of seeking.
+    setHover(null)
     onSeek(offsetForBucket(placed, bucket))
+  }
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     const bucket = bucketFromY(event.clientY)
@@ -224,6 +240,19 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
             className="absolute w-4 h-4 -translate-y-1/2 rounded-full bg-sky-500 shadow pointer-events-none"
             style={{ top: `${hover.bucket.offset * 100}%`, right: 13 }}
           />
+        )}
+
+        {/* Where the timeline is now, so the scrubber reads as a position and
+            not just a target. Hidden while dragging, which has its own thumb. */}
+        {current && !hover && (
+          <div
+            className="absolute flex items-center gap-1 -translate-y-1/2 pointer-events-none"
+            style={{ top: `${current.offset * 100}%`, right: 8 }}
+          >
+            <span className="px-1.5 py-0.5 rounded bg-sky-500 text-white whitespace-nowrap" style={{ fontSize: 11 }}>
+              {MONTH_NAMES[current.month - 1]} {current.year}
+            </span>
+          </div>
         )}
 
         {yearLabels.map(bucket => (
