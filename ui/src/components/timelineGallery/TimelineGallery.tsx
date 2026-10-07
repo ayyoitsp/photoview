@@ -159,8 +159,16 @@ const TimelineGallery = () => {
 
   // The lowest offset currently held. After a seek this is the start of the
   // loaded window rather than 0, and everything before it is unfetched.
+  //
+  // It has to follow a seek in both directions. Only ever lowering it meant
+  // that once the timeline had been scrolled to the top, loadedStart stayed 0
+  // forever, and a later seek into the middle looked to the upward loader like
+  // it was already at the newest end - so it never fetched anything above.
   const loadedStart = useRef(startOffset)
-  loadedStart.current = Math.min(loadedStart.current, startOffset)
+
+  useEffect(() => {
+    loadedStart.current = startOffset
+  }, [startOffset])
 
   const topSentinel = useRef<HTMLDivElement>(null)
   const loadingEarlier = useRef(false)
