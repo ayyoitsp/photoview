@@ -173,4 +173,46 @@ func TestMyTimeline(t *testing.T) {
 		// the four owned by the first user.
 		assert.LessOrEqual(t, total, 1)
 	})
+
+	// The index is only useful if position N in it is the same media as position
+	// N of the timeline. If the two ever order differently, every offset derived
+	// from the index points at the wrong photo.
+	t.Run("MyTimelineIndex matches the timeline it indexes", func(t *testing.T) {
+		index, err := actions.MyTimelineIndex(db, user, nil)
+		assert.NoError(t, err)
+
+		timelineMedia, err := actions.MyTimeline(db, user, nil, nil, nil)
+		assert.NoError(t, err)
+
+		assert.Len(t, index, len(timelineMedia))
+
+		for i, media := range timelineMedia {
+			d := media.DateShot
+			day := d.Year()*10000 + int(d.Month())*100 + d.Day()
+			assert.Equalf(t, day, index[i],
+				"index position %d holds %d, but the timeline has %s there",
+				i, index[i], media.Title)
+		}
+
+		// Days must never rise, or a binary search over them is meaningless.
+		for i := 1; i < len(index); i++ {
+			assert.LessOrEqualf(t, index[i], index[i-1],
+				"index rises at position %d: %d after %d", i, index[i], index[i-1])
+		}
+	})
+
+	t.Run("MyTimelineIndex honours the favorites filter", func(t *testing.T) {
+		favorites := true
+		index, err := actions.MyTimelineIndex(db, user, &favorites)
+
+		assert.NoError(t, err)
+		assert.Len(t, index, 1)
+	})
+
+	t.Run("MyTimelineIndex excludes media of other users", func(t *testing.T) {
+		index, err := actions.MyTimelineIndex(db, anotherUser, nil)
+
+		assert.NoError(t, err)
+		assert.LessOrEqual(t, len(index), 1)
+	})
 }

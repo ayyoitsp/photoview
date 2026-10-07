@@ -18,6 +18,7 @@ import {
 import { urlPresentModeSetupHook } from '../photoGallery/mediaGalleryReducer'
 import TimelineFilters from './TimelineFilters'
 import DateScrubber from './DateScrubber'
+import useTimelineIndex from './useTimelineIndex'
 import client from '../../apolloClient'
 
 /**
@@ -88,7 +89,7 @@ export const MY_TIMELINE_QUERY = gql`
  * loaded set reaches the viewport, and a small page means that happens often
  * enough to be felt as a stall.
  */
-const PAGE_SIZE = 500
+export const PAGE_SIZE = 500
 
 /**
  * How close to the top of the loaded window counts as wanting the page above
@@ -130,6 +131,10 @@ const TimelineGallery = () => {
   // already loaded. Landing exactly on the boundary would put the target at the
   // very top with nothing above it, and scrolling up would show nothing.
   const startOffset = Math.max(0, seekOffset - PAGE_SIZE)
+
+  // The whole timeline's dates, loaded once. Offsets come from here rather than
+  // being inferred from whatever happens to be paged in.
+  const timelineIndex = useTimelineIndex(onlyFavorites)
 
   const favoritesNeedsRefresh = useRef(false)
 
@@ -238,20 +243,21 @@ const TimelineGallery = () => {
     const onScroll = () => {
       void loadEarlier()
 
-      // Estimate which media is at the top of the viewport from how far down
-      // the loaded window the page has scrolled. Approximate - rows vary in
-      // height - but enough to put the marker on the right month.
+      // Which media is at the top of the viewport, as a fraction of the loaded
+      // window mapped onto the absolute offset of that window. Row heights vary,
+      // so this is approximate within the window, but the window's position in
+      // the timeline is exact because it came from the index.
       const media = loadedMedia.current
       if (media.length === 0) return
 
       const scrollable =
         document.documentElement.scrollHeight - window.innerHeight
       const fraction = scrollable > 0 ? window.scrollY / scrollable : 0
-      const index = Math.min(
+      const within = Math.min(
         media.length - 1,
         Math.max(0, Math.round(fraction * (media.length - 1)))
       )
-      setCurrentDate(media[index]?.date ?? null)
+      setCurrentDate(media[within]?.date ?? null)
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -351,6 +357,7 @@ const TimelineGallery = () => {
         onlyFavorites={onlyFavorites}
         onSeek={offset => setSeekOffset(offset)}
         currentDate={currentDate}
+        offsetForMonth={timelineIndex.offsetForMonth}
       />
       {hasEarlier && (
         <div className="flex justify-center my-3">

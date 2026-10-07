@@ -33,3 +33,13 @@ func (r *queryResolver) MyTimelineHistogram(ctx context.Context, onlyFavorites *
 
 	return actions.MyTimelineHistogram(r.DB(ctx), user, onlyFavorites)
 }
+
+// MyTimelineIndex is the resolver for the myTimelineIndex field.
+func (r *queryResolver) MyTimelineIndex(ctx context.Context, onlyFavorites *bool) ([]int, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return nil, auth.ErrUnauthorized
+	}
+
+	return actions.MyTimelineIndex(r.DB(ctx), user, onlyFavorites)
+}

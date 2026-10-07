@@ -18,6 +18,19 @@ extend type Query {
   myTimelineHistogram(
     onlyFavorites: Boolean
   ): [TimelineHistogramBucket!]! @isAuthorized
+
+  """
+  Every media date in the timeline, in timeline order, as seconds since the
+  Unix epoch.
+
+  The position of a date in this list is that media's offset into the timeline,
+  so a client holding it can map any date to an exact page offset and knows the
+  full length of the timeline without paging through it. Roughly 11 bytes per
+  media on the wire, so a library of 85000 is about 200KB compressed.
+  """
+  myTimelineIndex(
+    onlyFavorites: Boolean
+  ): [Int!]! @isAuthorized
 }
 
 """

@@ -69,30 +69,17 @@ export const bucketAtPosition = (
   return placed[0]
 }
 
-/**
- * How many media sit newer than the start of this bucket, which is exactly its
- * offset into the timeline. This is the whole reason the histogram exists: it
- * turns "take me to May 2015" into a page number, with no filtering and no
- * walking the timeline to find out where May 2015 begins.
- */
-export const offsetForBucket = (
-  placed: PlacedBucket[],
-  bucket: PlacedBucket
-): number => {
-  let offset = 0
-  for (const b of placed) {
-    if (b.year === bucket.year && b.month === bucket.month) break
-    offset += b.count
-  }
-  return offset
-}
-
 type DateScrubberProps = {
   onlyFavorites: boolean
   /** Called with the media offset the timeline should jump to. */
   onSeek(offset: number): void
   /** ISO date of the media currently at the top of the viewport, if known. */
   currentDate?: string | null
+  /**
+   * Exact offset of the first media in a month. Supplied by the timeline index,
+   * so seeking lands on the month itself rather than near it.
+   */
+  offsetForMonth(year: number, month: number): number
 }
 
 /** Tailwind's `lg` breakpoint, mirrored here because the inset is set inline. */
@@ -105,7 +92,12 @@ const LG_BREAKPOINT = 1024
  * knows the shape of the whole timeline without paging through it. That is what
  * lets you jump straight to a month instead of scrolling until it loads.
  */
-const DateScrubber = ({ onlyFavorites, onSeek, currentDate }: DateScrubberProps) => {
+const DateScrubber = ({
+  onlyFavorites,
+  onSeek,
+  currentDate,
+  offsetForMonth,
+}: DateScrubberProps) => {
   const trackRef = useRef<HTMLDivElement>(null)
   const [hover, setHover] = useState<{ bucket: PlacedBucket; y: number } | null>(
     null
@@ -165,7 +157,7 @@ const DateScrubber = ({ onlyFavorites, onSeek, currentDate }: DateScrubberProps)
     // Nothing dismisses the tooltip after a tap - there is no pointer to move
     // away - so clear it as part of seeking.
     setHover(null)
-    onSeek(offsetForBucket(placed, bucket))
+    onSeek(offsetForMonth(bucket.year, bucket.month))
   }
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {

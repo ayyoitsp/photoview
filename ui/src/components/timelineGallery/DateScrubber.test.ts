@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { placeBuckets, bucketAtPosition, offsetForBucket } from './DateScrubber'
+import { placeBuckets, bucketAtPosition } from './DateScrubber'
 import { fromDateParam } from './TimelineGallery'
 
 const buckets = [
@@ -59,18 +59,5 @@ describe('fromDateParam', () => {
 
   test('is undefined when no date is set', () => {
     expect(fromDateParam(null)).toBeUndefined()
-  })
-})
-
-describe('offsetForBucket', () => {
-  const placed = placeBuckets(buckets)
-
-  test('counts the media newer than a bucket, which is its page offset', () => {
-    // Newest bucket starts the timeline.
-    expect(offsetForBucket(placed, placed[0])).toBe(0)
-    // 10 newer than the second.
-    expect(offsetForBucket(placed, placed[1])).toBe(10)
-    // 10 + 70 newer than the third.
-    expect(offsetForBucket(placed, placed[2])).toBe(80)
   })
 })
