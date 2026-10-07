@@ -1,7 +1,6 @@
 import { gql } from '@apollo/client'
 import React, { useContext } from 'react'
 import { Helmet } from 'react-helmet'
-import Header from '../header/Header'
 import { Authorized } from '../routes/AuthorizedRoute'
 import { Sidebar, SidebarContext } from '../sidebar/Sidebar'
 import MainMenu from './MainMenu'
@@ -28,7 +27,9 @@ const Layout = ({ children, title, ...otherProps }: LayoutProps) => {
         <title>{title ? `${title} - Photoview` : `Photoview`}</title>
       </Helmet>
       <div className="relative" {...otherProps} data-testid="Layout">
-        <Header />
+        {/* The header carried only the logo and the search bar while holding a
+            sticky strip of every screen. Removed here rather than deleted, so
+            restoring this one line brings it - and search - back. */}
         <div className="">
           <Authorized>
             <MainMenu />

@@ -37,3 +37,11 @@ html {
     max-width: revert;
   }
 }
+
+/* Android Chrome treats an overscroll at the top of the page as pull-to-refresh,
+   which fires while scrolling back up through the timeline and throws away the
+   loaded window. Keep overscroll inside the page. */
+html,
+body {
+  overscroll-behavior-y: contain;
+}

@@ -184,11 +184,11 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
       // Tailwind 2, whose JIT does not emit arbitrary values behind a variant,
       // so `lg:top-[120px]` compiles to nothing and the strip loses its bounds.
       //
-      // Below `lg` the main menu is a bottom bar 80px tall over a 72px header
-      // (Searchbar derives h-[calc(100vh-152px)] from the same two numbers), so
-      // the track has to stop above the bar rather than run underneath it.
+      // Below `lg` the main menu is a bottom bar 80px tall, so the track has to
+      // stop above it rather than run underneath where it cannot be reached.
+      // There is no header to clear any more, so the top is just a small inset.
       style={{
-        top: isWide ? 120 : 72,
+        top: isWide ? 24 : 16,
         bottom: isWide ? 16 : 88,
       }}
       data-testid="date-scrubber"

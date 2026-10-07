@@ -157,10 +157,65 @@ const TimelineGallery = () => {
       getItems: data => data.myTimeline,
     })
 
+  // The lowest offset currently held. After a seek this is the start of the
+  // loaded window rather than 0, and everything before it is unfetched.
+  const loadedStart = useRef(startOffset)
+  loadedStart.current = Math.min(loadedStart.current, startOffset)
+
+  const topSentinel = useRef<HTMLDivElement>(null)
+  const loadingEarlier = useRef(false)
+
+  // Scrolling down is handled by useScrollPagination, but there is no mirror of
+  // it for scrolling up, so after seeking into the middle of the timeline the
+  // months above the window could never be reached. Fetch them when the top of
+  // the list comes into view.
   useEffect(() => {
+    const sentinel = topSentinel.current
+    if (!sentinel) return
+
+    const observer = new IntersectionObserver(
+      async entries => {
+        if (!entries.some(e => e.isIntersecting)) return
+        if (loadingEarlier.current || loadedStart.current <= 0) return
+
+        loadingEarlier.current = true
+        const previous = Math.max(0, loadedStart.current - PAGE_SIZE)
+
+        // Prepending shifts everything down, so pin the scroll to the content
+        // that was already on screen instead of letting it jump.
+        const heightBefore = document.documentElement.scrollHeight
+        const scrollBefore = window.scrollY
+
+        try {
+          await fetchMore({ variables: { offset: previous, limit: PAGE_SIZE } })
+          loadedStart.current = previous
+
+          requestAnimationFrame(() => {
+            const grew = document.documentElement.scrollHeight - heightBefore
+            if (grew > 0) window.scrollTo({ top: scrollBefore + grew })
+          })
+        } finally {
+          loadingEarlier.current = false
+        }
+      },
+      { rootMargin: '200px 0px 0px 0px' }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [fetchMore, startOffset])
+
+  useEffect(() => {
+    // The cache indexes media by their absolute offset, so a timeline fetched
+    // from the middle is a sparse array: every slot before the fetched window is
+    // a hole. Grouping iterates the array directly and reads `.album` off each
+    // entry, so a hole throws and nothing renders at all. Drop them and show the
+    // window that is actually loaded.
+    const loaded = (data?.myTimeline ?? []).filter(Boolean)
+
     dispatchMedia({
       type: 'replaceTimelineGroups',
-      timeline: data?.myTimeline || [],
+      timeline: loaded,
     })
   }, [data])
 
@@ -221,6 +276,8 @@ const TimelineGallery = () => {
         onlyFavorites={onlyFavorites}
         onSeek={offset => setSeekOffset(offset)}
       />
+      {/* Watched to pull in the months above the loaded window after a seek. */}
+      <div ref={topSentinel} aria-hidden="true" />
       <div className="-mx-3 flex flex-wrap" ref={containerElem}>
         {timelineGroups}
       </div>
