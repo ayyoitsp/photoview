@@ -69,10 +69,28 @@ export const bucketAtPosition = (
   return placed[0]
 }
 
+/**
+ * How many media sit newer than the start of this bucket, which is exactly its
+ * offset into the timeline. This is the whole reason the histogram exists: it
+ * turns "take me to May 2015" into a page number, with no filtering and no
+ * walking the timeline to find out where May 2015 begins.
+ */
+export const offsetForBucket = (
+  placed: PlacedBucket[],
+  bucket: PlacedBucket
+): number => {
+  let offset = 0
+  for (const b of placed) {
+    if (b.year === bucket.year && b.month === bucket.month) break
+    offset += b.count
+  }
+  return offset
+}
+
 type DateScrubberProps = {
   onlyFavorites: boolean
-  /** Called with a `YYYY-MM` string to jump the timeline to that month. */
-  onSeek(yearMonth: string): void
+  /** Called with the media offset the timeline should jump to. */
+  onSeek(offset: number): void
 }
 
 /** Tailwind's `lg` breakpoint, mirrored here because the inset is set inline. */
@@ -132,7 +150,7 @@ const DateScrubber = ({ onlyFavorites, onSeek }: DateScrubberProps) => {
   const bucketFromY = (clientY: number) => bucketAtPosition(placed, positionFromY(clientY))
 
   const seekTo = (bucket: PlacedBucket) =>
-    onSeek(`${bucket.year}-${String(bucket.month).padStart(2, '0')}`)
+    onSeek(offsetForBucket(placed, bucket))
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     const bucket = bucketFromY(event.clientY)

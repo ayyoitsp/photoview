@@ -22,9 +22,10 @@ import client from '../../apolloClient'
 
 /**
  * Turn the `date` URL parameter into the exclusive upper bound the timeline
- * query wants. `YYYY` keeps the original meaning of the year filter, "that year
- * and earlier", while `YYYY-MM` comes from the date scrubber and lands on a
- * single month.
+ * query wants. This is the dropdown's filter only - the scrubber navigates by
+ * offset instead, so that seeking never removes anything from the timeline.
+ *
+ * `YYYY` means "that year and earlier"; `YYYY-MM` narrows to a month.
  */
 export const fromDateParam = (filterDate: string | null): string | undefined => {
   if (!filterDate) return undefined
@@ -81,6 +82,14 @@ export const MY_TIMELINE_QUERY = gql`
   }
 `
 
+/**
+ * Media fetched per request. Larger than it needs to be for one screen so that
+ * scrolling has a buffer ahead of it: the loader only fires once the end of the
+ * loaded set reaches the viewport, and a small page means that happens often
+ * enough to be felt as a stall.
+ */
+const PAGE_SIZE = 500
+
 export type TimelineGroup = {
   date: string
   albums: TimelineGroupAlbum[]
@@ -104,6 +113,18 @@ const TimelineGallery = () => {
   const filterDate = getParam('date')
   const setFilterDate = (x: string) => setParam('date', x)
 
+  // Where the scrubber has jumped to, as an offset into the timeline. This is
+  // deliberately not the date filter: seeking is navigation, so everything
+  // newer than the target has to stay in the timeline and stay scrollable.
+  const seekOffset = parseInt(getParam('offset') ?? '0') || 0
+  const setSeekOffset = (offset: number) =>
+    setParam('offset', offset > 0 ? String(offset) : null)
+
+  // Start a page earlier than the target so the months just newer than it are
+  // already loaded. Landing exactly on the boundary would put the target at the
+  // very top with nothing above it, and scrolling up would show nothing.
+  const startOffset = Math.max(0, seekOffset - PAGE_SIZE)
+
   const favoritesNeedsRefresh = useRef(false)
 
   const [mediaState, dispatchMedia] = useReducer(timelineGalleryReducer, {
@@ -123,8 +144,8 @@ const TimelineGallery = () => {
     variables: {
       onlyFavorites,
       fromDate: fromDateParam(filterDate),
-      offset: 0,
-      limit: 200,
+      offset: startOffset,
+      limit: PAGE_SIZE,
     },
   })
 
@@ -148,14 +169,15 @@ const TimelineGallery = () => {
       await client.resetStore()
       await refetch({
         onlyFavorites,
-        fromDate: filterDate
-          ? `${parseInt(filterDate) + 1}-01-01T00:00:00Z`
-          : undefined,
-        offset: 0,
-        limit: 200,
+        fromDate: fromDateParam(filterDate),
+        offset: startOffset,
+        limit: PAGE_SIZE,
       })
+      // A seek lands mid-timeline, so start the view at the top of what was
+      // just loaded rather than wherever the previous scroll position was.
+      window.scrollTo({ top: 0 })
     })()
-  }, [filterDate])
+  }, [filterDate, startOffset])
 
   urlPresentModeSetupHook({
     dispatchMedia,
@@ -197,7 +219,7 @@ const TimelineGallery = () => {
       />
       <DateScrubber
         onlyFavorites={onlyFavorites}
-        onSeek={month => setFilterDate(month)}
+        onSeek={offset => setSeekOffset(offset)}
       />
       <div className="-mx-3 flex flex-wrap" ref={containerElem}>
         {timelineGroups}
