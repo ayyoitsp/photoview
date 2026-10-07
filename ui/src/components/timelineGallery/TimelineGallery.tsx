@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useReducer } from 'react'
+import React, { useRef, useEffect, useLayoutEffect, useReducer } from 'react'
 import { useQuery, gql } from '@apollo/client'
 import TimelineGroupDate from './TimelineGroupDate'
 import PresentView from '../photoGallery/presentView/PresentView'
@@ -173,6 +173,9 @@ const TimelineGallery = () => {
   const topSentinel = useRef<HTMLDivElement>(null)
   const loadingEarlier = useRef(false)
 
+  // Where the page stood just before media was prepended above it.
+  const anchor = useRef<{ scrollHeight: number; scrollY: number } | null>(null)
+
   // Scrolling down is handled by useScrollPagination, but there is no mirror of
   // it for scrolling up, so after seeking into the middle of the timeline the
   // months above the window could never be reached. Fetch them when the top of
@@ -189,19 +192,17 @@ const TimelineGallery = () => {
         loadingEarlier.current = true
         const previous = Math.max(0, loadedStart.current - PAGE_SIZE)
 
-        // Prepending shifts everything down, so pin the scroll to the content
-        // that was already on screen instead of letting it jump.
-        const heightBefore = document.documentElement.scrollHeight
-        const scrollBefore = window.scrollY
+        // Note where the page stands now. The correction cannot happen here:
+        // React has not committed the new media yet, so the document has not
+        // grown and there is nothing to measure.
+        anchor.current = {
+          scrollHeight: document.documentElement.scrollHeight,
+          scrollY: window.scrollY,
+        }
 
         try {
           await fetchMore({ variables: { offset: previous, limit: PAGE_SIZE } })
           loadedStart.current = previous
-
-          requestAnimationFrame(() => {
-            const grew = document.documentElement.scrollHeight - heightBefore
-            if (grew > 0) window.scrollTo({ top: scrollBefore + grew })
-          })
         } finally {
           loadingEarlier.current = false
         }
@@ -226,6 +227,22 @@ const TimelineGallery = () => {
       timeline: loaded,
     })
   }, [data])
+
+  // Media added above the viewport pushes everything down by its height, which
+  // reads as the page snapping away from whatever was being looked at. Put it
+  // back by however much the document grew.
+  //
+  // This runs in a layout effect because that is the first moment the new media
+  // is in the DOM, and it is still before the browser paints, so the shift is
+  // never seen.
+  useLayoutEffect(() => {
+    const pending = anchor.current
+    if (!pending) return
+    anchor.current = null
+
+    const grew = document.documentElement.scrollHeight - pending.scrollHeight
+    if (grew > 0) window.scrollTo({ top: pending.scrollY + grew })
+  }, [mediaState.timelineGroups])
 
   useEffect(() => {
     ; (async () => {
