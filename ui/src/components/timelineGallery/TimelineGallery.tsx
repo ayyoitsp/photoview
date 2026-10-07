@@ -194,6 +194,10 @@ const TimelineGallery = () => {
   // show where you are and not only where you are going.
   const [currentDate, setCurrentDate] = useState<string | null>(null)
 
+  // Mirrors the loadingEarlier ref. The ref guards re-entry and must not cause
+  // renders; this drives the button, so it must.
+  const [loadingEarlierState, setLoadingEarlierState] = useState(false)
+
   // Scrolling down is handled by useScrollPagination, but it has no counterpart
   // for scrolling up, so after seeking into the middle of the timeline the
   // months above the window could not be reached at all.
@@ -209,6 +213,7 @@ const TimelineGallery = () => {
     if (!force && window.scrollY > UPWARD_LOAD_TRIGGER_PX) return
 
     loadingEarlier.current = true
+    setLoadingEarlierState(true)
     const previous = Math.max(0, loadedStart.current - PAGE_SIZE)
 
     // Note where the page stands now. The correction cannot happen here: React
@@ -225,6 +230,7 @@ const TimelineGallery = () => {
       setHasEarlier(previous > 0)
     } finally {
       loadingEarlier.current = false
+      setLoadingEarlierState(false)
     }
   }, [fetchMore])
 
@@ -351,9 +357,27 @@ const TimelineGallery = () => {
           <button
             type="button"
             onClick={() => void loadEarlier(true)}
-            className="px-4 py-2 rounded border bg-white dark:bg-dark-bg2 dark:border-dark-border2 text-sm hover:bg-gray-50 dark:hover:bg-dark-bg"
+            disabled={loadingEarlierState}
+            className="px-4 py-2 rounded border bg-white dark:bg-dark-bg2 dark:border-dark-border2 text-sm hover:bg-gray-50 dark:hover:bg-dark-bg disabled:opacity-60 flex items-center gap-2"
           >
-            {t('timeline.load_newer', 'Load newer photos')}
+            {loadingEarlierState && (
+              <span
+                className="inline-block w-4 h-4 rounded-full animate-spin"
+                // Border colours inline: this project builds against Tailwind 2,
+                // which has no border-t-transparent, and a spinner with a solid
+                // ring does not read as spinning.
+                style={{
+                  borderWidth: 2,
+                  borderStyle: 'solid',
+                  borderColor: 'currentColor',
+                  borderTopColor: 'transparent',
+                }}
+                aria-hidden="true"
+              />
+            )}
+            {loadingEarlierState
+              ? t('timeline.load_newer_loading', 'Loading newer photos')
+              : t('timeline.load_newer', 'Load newer photos')}
           </button>
         </div>
       )}
