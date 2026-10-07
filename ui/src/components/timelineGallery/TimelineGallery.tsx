@@ -19,7 +19,6 @@ import { urlPresentModeSetupHook } from '../photoGallery/mediaGalleryReducer'
 import TimelineFilters from './TimelineFilters'
 import DateScrubber from './DateScrubber'
 import useTimelineIndex from './useTimelineIndex'
-import client from '../../apolloClient'
 
 /**
  * Turn the `date` URL parameter into the exclusive upper bound the timeline
@@ -266,12 +265,20 @@ const TimelineGallery = () => {
   }, [loadEarlier])
 
   useEffect(() => {
-    // The cache indexes media by their absolute offset, so a timeline fetched
-    // from the middle is a sparse array: every slot before the fetched window is
-    // a hole. Grouping iterates the array directly and reads `.album` off each
-    // entry, so a hole throws and nothing renders at all. Drop them and show the
-    // window that is actually loaded.
-    const loaded = (data?.myTimeline ?? []).filter(Boolean)
+    // The cache indexes media by absolute offset, so what it holds is a sparse
+    // array that may contain several disconnected windows at once - the one
+    // first loaded at the top of the timeline, and whatever a seek has since
+    // pulled in from the middle. Flattening all of it put 2026 photos directly
+    // above 2012 ones.
+    //
+    // Take only the run that is contiguous from the start of the current
+    // window, which is the stretch the viewport can actually scroll through.
+    const raw = data?.myTimeline ?? []
+    const loaded: myTimeline_myTimeline[] = []
+    for (let i = loadedStart.current; i < raw.length; i++) {
+      if (!raw[i]) break
+      loaded.push(raw[i])
+    }
     loadedMedia.current = loaded
 
     dispatchMedia({
@@ -302,7 +309,9 @@ const TimelineGallery = () => {
 
   useEffect(() => {
     ; (async () => {
-      await client.resetStore()
+      // No resetStore here: it refetches every active query with the variables
+      // it already had, which re-populates the window the seek is leaving and
+      // leaves two disconnected stretches of timeline in the cache at once.
       await refetch({
         onlyFavorites,
         fromDate: fromDateParam(filterDate),
